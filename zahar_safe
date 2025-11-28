@@ -34,7 +34,7 @@ String red2 = "41322376319042129";
 
 #define ssid "CPOD" // Имя wifi сети
 #define password "ApoX51s42wR7FDK8" //Пароль wifi сети
-#define bot_token "7960137600:AAGORbdkbUroYWryB_jW5u_mC1i853NRpps" //Токен тг бота 
+#define bot_token "пу-пу-пу" //Токен тг бота 
 
 #define WIDTH 2 //Количевство матриц по горизонтали
 #define HEIGHT 1 //Количевство матриц по вертикали
