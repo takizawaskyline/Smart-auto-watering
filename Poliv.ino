@@ -14,7 +14,7 @@ bool mqttConnected = false;  // Добавлена переменная
 #define hum_sen6 19
 #define hum_sen7 23
 
-int hum_sens_pin[7] = {32, 33, 34, 35, 36, 37, 38};
+int hum_sens_pin[5] = {32, 33, 34, 35, 36};
 
 #define temp_sens1 13
 #define temp_sens2 12
@@ -24,7 +24,8 @@ int hum_sens_pin[7] = {32, 33, 34, 35, 36, 37, 38};
 #define temp_sens6 25
 #define temp_sens7 33
 
-int temp_sens_pin[7] = {13, 12, 14, 27, 26, 25, 33};
+int temp_sens_pin[3] = {13, 12, 14};
+
 
 #define dht22_sens 32
 
@@ -37,19 +38,26 @@ const int port_mqtt = 19778;
 const char* server_mqtt = "m9.wqtt.ru";
 const char* mqtt_topic_pub = "epstains_file/delo_na_ostrove/vecherinki/Andrey_Grygoriev";
 const char* mqtt_topic_sub = "electro/wqtt/esp32/led"; 
-const char* mqtt_topic_hum = "poliv/hum_sens_val";
+const char* mqtt_topic_sens = "poliv/hum_sens_val";
+
 
 
 #include <Wire.h>
 #include <Drewduino_I2CRelay_PCA95x5.h>
+#include <GyverDS18.h>
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+  GyverDS18Single ds(temp_sens_pin[0]);
+  GyverDS18Single ds2(temp_sens_pin[1]);
+  GyverDS18Single ds3(temp_sens_pin[2]);  // пин 
+
 void setup() {
+  ds.setResolution(12);
   Serial.begin(9600);
 
-  for(int i = 0; i < 6; i++) {
+  for(int i = 0; i < 5; i++) {
     pinMode(hum_sens_pin[i], INPUT);
   }
 
@@ -75,7 +83,7 @@ void loop() {
 
   client.loop();
 
-   hum_sens();
+   sens_val();
   
 }
 
@@ -146,20 +154,25 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 
-  void hum_sens() {
+  void sens_val() {
     delay(2000);
-    int hum_sens_pin[7] = {32, 33, 34, 35, 36};
-    int val_h[7];
-    for (int i=0; i < 7; i++) {
+    int val_h[5];
+    for (int i=0; i < 5; i++) {
        val_h[i] = analogRead(hum_sens_pin[i]);
        Serial.println(val_h[i]);
     }
-      String json = json_file(val_h);
-    
-      client.publish(mqtt_topic_hum, json.c_str());
+      int val_temp[3];
+      val_temp[0] = ds.getTemp();
+      val_temp[1] = ds1getTemp();
+      val_temp[2] = ds2getTemp();
+
+      String json = json_file(val_h, val_temp);
+
+      client.publish(mqtt_topic_sens, json.c_str());
   }
 
-  String json_file (int* val_h) {
+
+  String json_file (int* val_h, int* val_temp) {
 
   String jsonchik = "{";
   jsonchik += "\"key\":\"info_about_AC\",";
@@ -167,7 +180,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   jsonchik += "\"hum2\":" + String(val_h[1]) + ",";
   jsonchik += "\"hum3\":" + String(val_h[2]) + ",";
   jsonchik += "\"hum4\":" + String(val_h[3]) + ",";
-  jsonchik += "\"hum5\":" + String(val_h[4]);
+  jsonchik += "\"hum5\":" + String(val_h[4]) + ",";
+  jsonchik += "\"temp1\":" + String(val_temp[0]) + ",";
+  jsonchik += "\"temp2\":" + String(val_temp[1]) + ",";
+  jsonchik += "\"temp3\":" + String(val_temp[2]);
   jsonchik += "}";
 
   return jsonchik;
