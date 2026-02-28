@@ -1,76 +1,62 @@
 #define GH_INCLUDE_PORTAL
+#define dht11_sens 32
+
 
 #include <WiFi.h>
 #include <PubSubClient.h>
-
-bool flag = 0;
-bool mqttConnected = false;  // Добавлена переменная
-
-#define hum_sen1 15
-#define hum_sen2 2
-#define hum_sen3 4
-#define hum_sen4 5
-#define hum_sen5 18
-#define hum_sen6 19
-#define hum_sen7 23
-
-int hum_sens_pin[5] = {32, 33, 34, 35, 36};
-
-#define temp_sens1 13
-#define temp_sens2 12
-#define temp_sens3 14
-#define temp_sens4 27
-#define temp_sens5 26
-#define temp_sens6 25
-#define temp_sens7 33
-
-int temp_sens_pin[3] = {13, 12, 14};
-
-
-#define dht22_sens 32
-
-#define ssid "CPOD"
-#define password "ApoX51s42wR7FDK8"
-
-const char* user_mqtt = "Poliv";
-const char* password_mqtt = "Iz8GUHz8";
-const int port_mqtt = 19778;
-const char* server_mqtt = "m9.wqtt.ru";
-const char* mqtt_topic_pub = "epstains_file/delo_na_ostrove/vecherinki/Andrey_Grygoriev";
-const char* mqtt_topic_sub = "electro/wqtt/esp32/led"; 
-const char* mqtt_topic_sens = "poliv/hum_sens_val";
-
-
-
 #include <Wire.h>
 #include <Drewduino_I2CRelay_PCA95x5.h>
 #include <GyverDS18.h>
 
+bool mqttConnected = false;  // Добавлена переменная
+
+int hum_sens_pin[5] = { 32, 33, 34, 35, 36 };
+int temp_sens_pin[3] = { 13, 12, 14 };
+
+
+// Настройки Wi-Fi
+const char* ssid = "CPOD";
+const char* password = "ApoX51s42wR7FDK8";
+
+// Настройки MQTT
+const char* mqtt_server = "m5.wqtt.ru";
+const int mqtt_port = 14182;
+const char* mqtt_user = "Rasbery";
+const char* mqtt_pass = "154321";
+const char* mqtt_topic_sens_pub = "auto_poliv/sensor/humidity";
+
+unsigned long previousMillis = 0;  // время последней отправки
+const long interval = 5000;        // интервал 5 секунд (в миллисекундах)
+
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-  GyverDS18Single ds(temp_sens_pin[0]);
-  GyverDS18Single ds2(temp_sens_pin[1]);
-  GyverDS18Single ds3(temp_sens_pin[2]);  // пин 
+// Инициализация датчиков температуры
+GyverDS18Single ds1(temp_sens_pin[0]);
+GyverDS18Single ds2(temp_sens_pin[1]);
+GyverDS18Single ds3(temp_sens_pin[2]);
 
 void setup() {
-  ds.setResolution(12);
-  Serial.begin(9600);
+  ds1.setResolution(12);
+  ds2.setResolution(12);
+  ds3.setResolution(12);
 
-  for(int i = 0; i < 5; i++) {
+  Serial.begin(115200);
+
+  for (int i = 0; i < 5; i++) {
     pinMode(hum_sens_pin[i], INPUT);
   }
 
-  client.setServer(server_mqtt, port_mqtt);
+  client.setServer(mqtt_server, mqtt_port);
   client.setBufferSize(256);  // Увеличиваем буфер сообщений
 
   wifi();
-  client.setCallback(callback);  // Функция обработки входящих сообщений
+  //client.setCallback(callback);  // Функция обработки входящих сообщений
 }
 
 void loop() {
-
- // delay(2000);
+  unsigned long currentMillis = millis();
   if (!client.connected()) {
     mqttConnected = false;
     reconnectMQTT();
@@ -82,100 +68,81 @@ void loop() {
   }
 
   client.loop();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
 
-   sens_val();
-  
+    String data_json = sens_val();
+    client.publish(mqtt_topic_sens_pub, data_json.c_str());
+    Serial.println(data_json);
+  }
 }
 
 void wifi() {
-  delay(2000);
-  Serial.begin(115200);
   Serial.println();
+  Serial.print("Подключение к ");
+  Serial.println(ssid);
 
   WiFi.begin(ssid, password);
+  delay(1000);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    if (millis() > 15000) ESP.restart();
   }
-  Serial.println("Connected");
+
+  Serial.println("\nWiFi подключён");
+  Serial.print("IP: ");
   Serial.println(WiFi.localIP());
+  delay(1000);
 }
 
-  
+
 
 void reconnectMQTT() {
   static unsigned long lastAttempt = 0;
-  
+
   // Пытаемся переподключаться не чаще 1 раза в 5 секунд
   if (millis() - lastAttempt < 5000) {
     return;
   }
   lastAttempt = millis();
-  
+
   Serial.print("Попытка подключения к MQTT...");
-  
+
   // Случайный ID клиента для избежания конфликтов
   String clientId = "ESP32-" + String(random(0xFFFF), HEX);
-   if (client.connect(clientId.c_str(), user_mqtt, password_mqtt)) {
+  if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
     Serial.println("Успешно!");
-    // ВОТ тут подписка на топик
-    client.subscribe(mqtt_topic_sub);
-  } 
-  else {
+    //ВОТ тут подписка на топик
+    //delay(500);
+    //client.subscribe(mqtt_topic_sub);
+  } else {
     Serial.print("Ошибка, rc=");
     Serial.println(client.state());
   }
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
-  //Печатем топик с которого получено сообщение
-  Serial.print("Получено сообщение [");
-  Serial.print(topic);
-  Serial.print("]: ");
-  
-  // Сохраняем сообщение в переменную  "message"
-  String message;
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  //Печатаем само сообщение в сериал
-  Serial.println(message);
+String sens_val() {
+  int val_h[5];
+  int val_temp[3];
 
-  //Если получено сообщение с топика mqtt_topic_sub
-  if (String(topic) == mqtt_topic_sub) {
-    if (message == "ТОМУ ЧТО НУЖНО") {
-      // делаем одно
-    }
-    if (message == "ТОМУ ЧТО НУЖНО2") {
-       // делаем другое
-    }  
+  for (int i = 0; i < 5; i++) {
+    val_h[i] = analogRead(hum_sens_pin[i]);
   }
+  
+  val_temp[0] = ds1.getTemp();
+  val_temp[1] = ds1.getTemp();
+  val_temp[2] = ds2.getTemp();
+
+  String json = json_file(val_h, val_temp);
+
+  return json;
 }
 
 
-  void sens_val() {
-    delay(2000);
-    int val_h[5];
-    for (int i=0; i < 5; i++) {
-       val_h[i] = analogRead(hum_sens_pin[i]);
-       Serial.println(val_h[i]);
-    }
-      int val_temp[3];
-      val_temp[0] = ds.getTemp();
-      val_temp[1] = ds1getTemp();
-      val_temp[2] = ds2getTemp();
-
-      String json = json_file(val_h, val_temp);
-
-      client.publish(mqtt_topic_sens, json.c_str());
-  }
-
-
-  String json_file (int* val_h, int* val_temp) {
+String json_file(int* val_h, int* val_temp) {
 
   String jsonchik = "{";
-  jsonchik += "\"key\":\"info_about_AC\",";
+  jsonchik += "\"key\":\"info_about_sost\",";
   jsonchik += "\"hum1\":" + String(val_h[0]) + ",";
   jsonchik += "\"hum2\":" + String(val_h[1]) + ",";
   jsonchik += "\"hum3\":" + String(val_h[2]) + ",";
@@ -187,4 +154,29 @@ void callback(char* topic, byte* payload, unsigned int length) {
   jsonchik += "}";
 
   return jsonchik;
-  }
+}
+
+// void callback(char* topic, byte* payload, unsigned int length) {
+//   //Печатем топик с которого получено сообщение
+//   Serial.print("Получено сообщение [");
+//   Serial.print(topic);
+//   Serial.print("]: ");
+
+//   // Сохраняем сообщение в переменную  "message"
+//   String message;
+//   for (int i = 0; i < length; i++) {
+//     message += (char)payload[i];
+//   }
+//   //Печатаем само сообщение в сериал
+//   Serial.println(message);
+
+//   //Если получено сообщение с топика mqtt_topic_sub
+//   if (String(topic) == mqtt_topic_sub) {
+//     if (message == "ТОМУ ЧТО НУЖНО") {
+//       // делаем одно
+//     }
+//     if (message == "ТОМУ ЧТО НУЖНО2") {
+//       // делаем другое
+//     }
+//   }
+// }
