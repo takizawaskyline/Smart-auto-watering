@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <Drewduino_I2CRelay_PCA95x5.h>
 #include <GyverDS18.h>
+#include "Cl_timestamp.h"
 
 bool mqttConnected = false;  // Добавлена переменная
 
@@ -23,7 +24,7 @@ const char* mqtt_server = "m5.wqtt.ru";
 const int mqtt_port = 14182;
 const char* mqtt_user = "Rasbery";
 const char* mqtt_pass = "154321";
-const char* mqtt_topic_sens_pub = "auto_poliv/sensor/humidity";
+const char* mqtt_topic_sens_pub = "auto_poliv/sensor/data";
 
 unsigned long previousMillis = 0;  // время последней отправки
 const long interval = 5000;        // интервал 5 секунд (в миллисекундах)
@@ -31,6 +32,7 @@ const long interval = 5000;        // интервал 5 секунд (в мил
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+timeSt test_send_time;
 
 // Инициализация датчиков температуры
 GyverDS18Single ds1(temp_sens_pin[0]);
@@ -38,11 +40,13 @@ GyverDS18Single ds2(temp_sens_pin[1]);
 GyverDS18Single ds3(temp_sens_pin[2]);
 
 void setup() {
+  Serial.begin(115200);
+
   ds1.setResolution(12);
   ds2.setResolution(12);
   ds3.setResolution(12);
 
-  Serial.begin(115200);
+  test_send_time.timeSetting("pool.ntp.org", 3 * 3600, 0);  // для timestamp | GMT+3 (Москва) = 3 * 3600 секунд, Летнее время (0, если не используется)
 
   for (int i = 0; i < 5; i++) {
     pinMode(hum_sens_pin[i], INPUT);
@@ -56,6 +60,11 @@ void setup() {
 }
 
 void loop() {
+
+  ds1.tick();
+  ds2.tick();
+  ds3.tick();
+
   unsigned long currentMillis = millis();
   if (!client.connected()) {
     mqttConnected = false;
@@ -128,7 +137,7 @@ String sens_val() {
   for (int i = 0; i < 5; i++) {
     val_h[i] = analogRead(hum_sens_pin[i]);
   }
-  
+
   val_temp[0] = ds1.getTemp();
   val_temp[1] = ds1.getTemp();
   val_temp[2] = ds2.getTemp();
@@ -140,18 +149,21 @@ String sens_val() {
 
 
 String json_file(int* val_h, int* val_temp) {
-
+  test_send_time.timeStam();
   String jsonchik = "{";
   jsonchik += "\"key\":\"info_about_sost\",";
-  jsonchik += "\"hum1\":" + String(val_h[0]) + ",";
-  jsonchik += "\"hum2\":" + String(val_h[1]) + ",";
-  jsonchik += "\"hum3\":" + String(val_h[2]) + ",";
-  jsonchik += "\"hum4\":" + String(val_h[3]) + ",";
-  jsonchik += "\"hum5\":" + String(val_h[4]) + ",";
-  jsonchik += "\"temp1\":" + String(val_temp[0]) + ",";
-  jsonchik += "\"temp2\":" + String(val_temp[1]) + ",";
-  jsonchik += "\"temp3\":" + String(val_temp[2]);
-  jsonchik += "}";
+  jsonchik += "\"timestamp\":" + String(test_send_time.timeS) + ",";
+  jsonchik += "\"humidity\": {";
+  jsonchik += "\"sensor_1\":" + String(val_h[0]) + ",";
+  jsonchik += "\"sensor_2\":" + String(val_h[1]) + ",";
+  jsonchik += "\"sensor_3\":" + String(val_h[2]) + ",";
+  jsonchik += "\"sensor_4\":" + String(val_h[3]) + ",";
+  jsonchik += "\"sensor_5\":" + String(val_h[4]) + "},";
+  jsonchik += "\"temperature\": {";
+  jsonchik += "\"sensor_1\":" + String(val_temp[0]) + ",";
+  jsonchik += "\"sensor_2\":" + String(val_temp[1]) + ",";
+  jsonchik += "\"sensor_3\":" + String(val_temp[2]);
+  jsonchik += "}}";
 
   return jsonchik;
 }
