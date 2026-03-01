@@ -24,7 +24,7 @@ const char* mqtt_server = "m5.wqtt.ru";
 const int mqtt_port = 14182;
 const char* mqtt_user = "Rasbery";
 const char* mqtt_pass = "154321";
-const char* mqtt_topic_sens_pub = "auto_poliv/sensor/data";
+const char* mqtt_topic_sens_pub = "kvant/R22/BV/auto_poliv/sensor/data";
 
 unsigned long previousMillis = 0;  // время последней отправки
 const long interval = 5000;        // интервал 5 секунд (в миллисекундах)
