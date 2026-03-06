@@ -1,6 +1,4 @@
 #define GH_INCLUDE_PORTAL
-#define dht11_sens 32
-
 
 #include <WiFi.h>
 #include <PubSubClient.h>
@@ -8,6 +6,7 @@
 #include <Drewduino_I2CRelay_PCA95x5.h>
 #include <GyverDS18.h>
 #include "Cl_timestamp.h"
+#include <DHT.h>
 
 bool mqttConnected = false;  // Добавлена переменная
 
@@ -39,8 +38,12 @@ GyverDS18Single ds1(temp_sens_pin[0]);
 GyverDS18Single ds2(temp_sens_pin[1]);
 GyverDS18Single ds3(temp_sens_pin[2]);
 
+DHT dht(25, DHT11);
+
 void setup() {
   Serial.begin(115200);
+
+  dht.begin();
 
   ds1.setResolution(12);
   ds2.setResolution(12);
@@ -135,20 +138,23 @@ String sens_val() {
   int val_temp[3];
 
   for (int i = 0; i < 5; i++) {
-    val_h[i] = analogRead(hum_sens_pin[i]);
+    val_h[i] = map(analogRead(hum_sens_pin[i]), 0, 4096, 100, 0);
   }
 
   val_temp[0] = ds1.getTemp();
   val_temp[1] = ds1.getTemp();
   val_temp[2] = ds2.getTemp();
 
-  String json = json_file(val_h, val_temp);
+  float dht11_hum = dht.readHumidity();
+  float dht11_temp = dht.readTemperature();
+
+  String json = json_file(val_h, val_temp, dht11_hum, dht11_temp);
 
   return json;
 }
 
 
-String json_file(int* val_h, int* val_temp) {
+String json_file(int* val_h, int* val_temp, float dht11_hum, float dht11_temp) {
   test_send_time.timeStam();
   String jsonchik = "{";
   jsonchik += "\"key\":\"info_about_sost\",";
@@ -162,8 +168,11 @@ String json_file(int* val_h, int* val_temp) {
   jsonchik += "\"temperature\": {";
   jsonchik += "\"sensor_1\":" + String(val_temp[0]) + ",";
   jsonchik += "\"sensor_2\":" + String(val_temp[1]) + ",";
-  jsonchik += "\"sensor_3\":" + String(val_temp[2]);
-  jsonchik += "}}";
+  jsonchik += "\"sensor_3\":" + String(val_temp[2]) + "},";
+  jsonchik += "\"DHT11\": {";
+  jsonchik += "\"humidity\":" + String(dht11_hum) + ",";
+  jsonchik += "\"temperature\":" + String(dht11_temp) + "},";
+  jsonchik += "}";
 
   return jsonchik;
 }
