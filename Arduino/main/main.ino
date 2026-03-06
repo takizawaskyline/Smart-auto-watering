@@ -1,4 +1,3 @@
-#define GH_INCLUDE_PORTAL
 
 #include <WiFi.h>
 #include <PubSubClient.h>
@@ -24,6 +23,11 @@ const int mqtt_port = 14182;
 const char* mqtt_user = "Rasbery";
 const char* mqtt_pass = "154321";
 const char* mqtt_topic_sens_pub = "kvant/R22/BV/auto_poliv/sensor/data";
+const char* mqtt_topic_sub_pomp1 = "kvant/R22/BV/auto_poliv/pompa_1/send_get";
+const char* mqtt_topic_sub_pomp2 = "kvant/R22/BV/auto_poliv/pompa_2/send_get";
+const char* mqtt_topic_sub_pomp3 = "kvant/R22/BV/auto_poliv/pompa_3/send_get";
+
+
 
 unsigned long previousMillis = 0;  // время последней отправки
 const long interval = 5000;        // интервал 5 секунд (в миллисекундах)
@@ -40,10 +44,15 @@ GyverDS18Single ds3(temp_sens_pin[2]);
 
 DHT dht(25, DHT11);
 
+Drewduino_I2CRelay_PCA95x5 relay;
+
 void setup() {
   Serial.begin(115200);
-
   dht.begin();
+  Wire.begin();
+  relay.begin(0x20, 8, Wire, false);  // addr, count, wire, activeLow
+
+  relay.allOff();
 
   ds1.setResolution(12);
   ds2.setResolution(12);
@@ -56,10 +65,10 @@ void setup() {
   }
 
   client.setServer(mqtt_server, mqtt_port);
-  client.setBufferSize(256);  // Увеличиваем буфер сообщений
+  client.setBufferSize(512);  // Увеличиваем буфер сообщений
 
   wifi();
-  //client.setCallback(callback);  // Функция обработки входящих сообщений
+  client.setCallback(callback);  // Функция обработки входящих сообщений
 }
 
 void loop() {
@@ -126,7 +135,9 @@ void reconnectMQTT() {
     Serial.println("Успешно!");
     //ВОТ тут подписка на топик
     //delay(500);
-    //client.subscribe(mqtt_topic_sub);
+    client.subscribe(mqtt_topic_sub_pomp1);
+    client.subscribe(mqtt_topic_sub_pomp2);
+    client.subscribe(mqtt_topic_sub_pomp3);
   } else {
     Serial.print("Ошибка, rc=");
     Serial.println(client.state());
@@ -142,8 +153,8 @@ String sens_val() {
   }
 
   val_temp[0] = ds1.getTemp();
-  val_temp[1] = ds1.getTemp();
-  val_temp[2] = ds2.getTemp();
+  val_temp[1] = ds2.getTemp();
+  val_temp[2] = ds3.getTemp();
 
   float dht11_hum = dht.readHumidity();
   float dht11_temp = dht.readTemperature();
@@ -171,33 +182,50 @@ String json_file(int* val_h, int* val_temp, float dht11_hum, float dht11_temp) {
   jsonchik += "\"sensor_3\":" + String(val_temp[2]) + "},";
   jsonchik += "\"DHT11\": {";
   jsonchik += "\"humidity\":" + String(dht11_hum) + ",";
-  jsonchik += "\"temperature\":" + String(dht11_temp) + "},";
+  jsonchik += "\"temperature\":" + String(dht11_temp) + "}";
   jsonchik += "}";
 
   return jsonchik;
 }
 
-// void callback(char* topic, byte* payload, unsigned int length) {
-//   //Печатем топик с которого получено сообщение
-//   Serial.print("Получено сообщение [");
-//   Serial.print(topic);
-//   Serial.print("]: ");
+void callback(char* topic, byte* payload, unsigned int length) {
+  //Печатем топик с которого получено сообщение
+  Serial.print("Получено сообщение [");
+  Serial.print(topic);
+  Serial.print("]: ");
 
-//   // Сохраняем сообщение в переменную  "message"
-//   String message;
-//   for (int i = 0; i < length; i++) {
-//     message += (char)payload[i];
-//   }
-//   //Печатаем само сообщение в сериал
-//   Serial.println(message);
+  // Сохраняем сообщение в переменную  "message"
+  String message;
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  //Печатаем само сообщение в сериал
+  Serial.println(message);
 
-//   //Если получено сообщение с топика mqtt_topic_sub
-//   if (String(topic) == mqtt_topic_sub) {
-//     if (message == "ТОМУ ЧТО НУЖНО") {
-//       // делаем одно
-//     }
-//     if (message == "ТОМУ ЧТО НУЖНО2") {
-//       // делаем другое
-//     }
-//   }
-// }
+  //Если получено сообщение с топика mqtt_topic_sub
+  if (String(topic) == mqtt_topic_sub_pomp1) {
+    if (message == "on") {
+      // вкл 1я помпа
+      relay.relaySet(1, 1);
+    } else if (message == "off") {
+      // выкл 1я помпа
+      relay.relaySet(1, 0);
+    }
+  } else if (String(topic) == mqtt_topic_sub_pomp2) {
+    if (message == "on") {
+      // вкл 2я помпа
+      relay.relaySet(2, 1);
+    } else if (message == "off") {
+      // выкл 2я помпа
+      relay.relaySet(2, 0);
+    }
+  } else if (String(topic) == mqtt_topic_sub_pomp3) {
+    if (message == "on") {
+      // вкл 3я помпа
+      relay.relaySet(3, 1);
+    } else if (message == "off") {
+      // выкл 3я помпа
+      relay.relaySet(3, 0);
+    }
+  }
+}

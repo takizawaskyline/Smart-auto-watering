@@ -1,4 +1,5 @@
 mqtt:
+  sensor:
 # AUTOPOLIV
 # Влажность почвы с датчика 1 Auto-poliv  
     - unique_id: AP_humidity_1
@@ -63,9 +64,23 @@ mqtt:
       device_class: temperature
       unit_of_measurement: "°C"
       value_template: "{{ value_json.temperature.sensor_3 }}"
+# Влажность с DHT11 Auto-poliv 
+    - unique_id: AP_DHT11_hum
+      name: "AP_DHT11_h"
+      state_topic: "kvant/R22/BV/auto_poliv/sensor/data"
+      device_class: humidity
+      unit_of_measurement: "%"
+      value_template: "{{ value_json.DHT11.humidity }}"
 
+# Температура с DHT11 Auto-poliv 
+    - unique_id: AP_DHT11_temp
+      name: "AP_DHT11_temp"
+      state_topic: "kvant/R22/BV/auto_poliv/sensor/data"
+      device_class: temperature
+      unit_of_measurement: "°C"
+      value_template: "{{ value_json.DHT11.temperature }}"
+      
   switch:
-  
 # Управление помпой 1 Auto-poliv  
     - unique_id: AP_pump_1
       name: "AP_pump_1"
