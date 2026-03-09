@@ -1,4 +1,4 @@
-
+//--------------------------------------------------------Подключение библиотек и классов-------------------------------------------------------------------------------------------------------------------------------------------------------
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <Wire.h>
@@ -6,16 +6,27 @@
 #include <GyverDS18.h>
 #include "Cl_timestamp.h"
 #include <DHT.h>
+#include <Adafruit_BMP280.h>    // Подключаем библиотеку для работы с датчиком BMP280
+#include <Adafruit_AHTX0.h>     // Подключаем библиотеку для работы с датчиком AHT20
+//--------------------------------------------------------Создание переменных и массивов-----------------------------------------------------------------------------------------------------------------------------------------------
+
 
 bool mqttConnected = false;  // Добавлена переменная
 
 int hum_sens_pin[5] = { 32, 33, 34, 35, 36 };
-int temp_sens_pin[3] = { 13, 12, 14 };
+int temp_sens_pin[3] = { 13, 27, 14 };
 
 
 // Настройки Wi-Fi
-const char* ssid = "CPOD";
-const char* password = "ApoX51s42wR7FDK8";
+
+// const char* ssid = "CPOD";
+// const char* password = "ApoX51s42wR7FDK8";
+
+// const char* ssid = "ForEsp32";
+// const char* password = "aztj5781";
+
+const char* ssid = "WI-FI";
+const char* password = "6LpEL3nx";
 
 // Настройки MQTT
 const char* mqtt_server = "m5.wqtt.ru";
@@ -46,10 +57,17 @@ DHT dht(25, DHT11);
 
 Drewduino_I2CRelay_PCA95x5 relay;
 
+Adafruit_BMP280 bmp;            // Создаем объект для работы с датчиком BMP280
+Adafruit_AHTX0 aht;             // Создаем объект для работы с датчиком AHT20
+
+//--------------------------------------------------------Настройка--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 void setup() {
   Serial.begin(115200);
   dht.begin();
   Wire.begin();
+  bmp.begin(0x76);
+  aht.begin(&Wire, 0, 0x38);
   relay.begin(0x20, 8, Wire, false);  // addr, count, wire, activeLow
 
   relay.allOff();
@@ -70,7 +88,7 @@ void setup() {
   wifi();
   client.setCallback(callback);  // Функция обработки входящих сообщений
 }
-
+//--------------------------------------------------------Основная часть кода--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 void loop() {
 
   ds1.tick();
@@ -145,6 +163,8 @@ void reconnectMQTT() {
 }
 
 String sens_val() {
+  sensors_event_t tempEvent, humidEvent;
+  aht.getEvent(&tempEvent, &humidEvent); // Запрашиваем обновление показаний температуры и влажности
   int val_h[5];
   int val_temp[3];
 
@@ -156,16 +176,21 @@ String sens_val() {
   val_temp[1] = ds2.getTemp();
   val_temp[2] = ds3.getTemp();
 
+  float aht20_hum = humidEvent.relative_humidity;  // Читаем данные влажности с AHT20
+  float aht20_temp = tempEvent.temperature;      // Читаем данные температуры с AHT20
+
+  float bmp280_pressure = bmp.readPressure() / 133.3F;   // Читаем данные давления с BMP280
+
   float dht11_hum = dht.readHumidity();
   float dht11_temp = dht.readTemperature();
 
-  String json = json_file(val_h, val_temp, dht11_hum, dht11_temp);
+  String json = json_file(val_h, val_temp, dht11_hum, dht11_temp, aht20_hum, aht20_temp, bmp280_pressure);
 
   return json;
 }
 
 
-String json_file(int* val_h, int* val_temp, float dht11_hum, float dht11_temp) {
+String json_file(int* val_h, int* val_temp, float dht11_hum, float dht11_temp, float aht20_hum, float aht20_temp, float bmp280_pressure) {
   test_send_time.timeStam();
   String jsonchik = "{";
   jsonchik += "\"key\":\"info_about_sost\",";
@@ -181,8 +206,12 @@ String json_file(int* val_h, int* val_temp, float dht11_hum, float dht11_temp) {
   jsonchik += "\"sensor_2\":" + String(val_temp[1]) + ",";
   jsonchik += "\"sensor_3\":" + String(val_temp[2]) + "},";
   jsonchik += "\"DHT11\": {";
-  jsonchik += "\"humidity\":" + String(dht11_hum) + ",";
-  jsonchik += "\"temperature\":" + String(dht11_temp) + "}";
+  jsonchik += "\"humidity\":" + (isnan(dht11_hum) ? String("0") : String(dht11_hum)) + ",";
+  jsonchik += "\"temperature\":" + (isnan(dht11_temp) ? String("0") : String(dht11_temp)) + "},";
+  jsonchik += "\"AHT20\": {";
+  jsonchik += "\"humidity\":" + String(aht20_hum) + ",";
+  jsonchik += "\"temperature\":" + String(aht20_temp) + "},"; 
+  jsonchik += "\"BMP280\":" + (isnan(bmp280_pressure) ? String("0") : String(bmp280_pressure));
   jsonchik += "}";
 
   return jsonchik;
